@@ -1,6 +1,6 @@
-# [Project name]
+# Country Pulse
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Country Pulse is an Android-first country explorer that pairs a complete country directory with current news briefings for each country.
 
 ## Run & Operate
 
@@ -22,15 +22,25 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/country-pulse/` — Expo mobile app and its visual theme.
+- `artifacts/country-pulse/app/index.tsx` — country picker, search, news briefing, refresh, and article-opening flows.
+- `artifacts/country-pulse/constants/colors.ts` — Country Pulse light and dark semantic color tokens.
+- `artifacts/api-server/src/routes/world.ts` — server-side proxy for the public country directory and Google News RSS.
+- `lib/api-spec/openapi.yaml` — source of truth for the world data endpoints.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The mobile client uses the generated API client and React Query for country and news data.
+- Public upstream data is proxied through the Express API so Android and browser previews avoid cross-origin restrictions.
+- The selected country is persisted locally with AsyncStorage so the last briefing returns on the next launch.
+- Google News RSS is used for headlines so the first build works without a user-supplied news API key.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Browse all 249 countries in a horizontally scrollable picker.
+- Search the directory by country name.
+- Tap a country to load a current related-news briefing.
+- Pull to refresh, retry failed requests, and open a story in the device browser.
 
 ## User preferences
 
@@ -38,7 +48,9 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- After changing `lib/api-spec/openapi.yaml`, run `pnpm --filter @workspace/api-spec run codegen`.
+- The API server must be running for the Expo preview to load countries and headlines.
+- The country directory source is a public upstream feed; keep its response shape validated in the server proxy.
 
 ## Pointers
 

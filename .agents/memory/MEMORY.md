@@ -1,0 +1,1 @@
+- [Public data sources](public-data-sources.md) — proxy and validate public upstream APIs because versioned endpoints can deprecate without warning.

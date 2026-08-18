@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: world
+    description: Country directory and current news
 paths:
   /healthz:
     get:
@@ -24,6 +26,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /countries:
+    get:
+      operationId: listCountries
+      tags: [world]
+      summary: List countries
+      description: Returns the full country directory used by the explorer
+      responses:
+        "200":
+          description: Country directory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Country"
+        "502":
+          description: Country directory unavailable
+  /news:
+    get:
+      operationId: listCountryNews
+      tags: [world]
+      summary: List country news
+      description: Returns current Google News RSS headlines for a country
+      parameters:
+        - name: country
+          in: query
+          required: true
+          description: Common country name to search for
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        "200":
+          description: Current country headlines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NewsItem"
+        "400":
+          description: Country name is missing
+        "502":
+          description: News source unavailable
 components:
   schemas:
     HealthStatus:
@@ -33,4 +79,48 @@ components:
           type: string
       required:
         - status
+    Country:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        officialName:
+          type: string
+        region:
+          type: string
+        subregion:
+          type: string
+        flagUrl:
+          type: ["string", "null"]
+        population:
+          type: number
+      required:
+        - code
+        - name
+        - officialName
+        - region
+        - subregion
+        - flagUrl
+        - population
+    NewsItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        publisher:
+          type: string
+        link:
+          type: string
+        publishedAt:
+          type: string
+      required:
+        - id
+        - title
+        - publisher
+        - link
+        - publishedAt
 
