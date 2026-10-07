@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/country-pulse-design-system/"
+title = "Country Pulse Design System"
+description = "A reusable visual system extracted from the Country Pulse mobile app: warm editorial surfaces, deep teal framing, coral headlines, lime live states, and compact country and news components."
+version = "1.0.0"
+id = "artifacts/country-pulse-design-system"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/country-pulse-design-system/" ]
+localPort = 23397
+
+[services.development]
+run = "pnpm --filter @workspace/country-pulse-design-system run dev"
+
+[services.env]
+PORT = "23397"
+BASE_PATH = "/country-pulse-design-system/"
