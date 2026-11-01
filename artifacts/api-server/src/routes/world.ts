@@ -1,3 +1,4 @@
+
 import { Router, type IRouter } from "express";
 import {
   ListCountriesResponse,
@@ -5,65 +6,37 @@ import {
   ListCountryNewsResponse,
 } from "@workspace/api-zod";
 
+import { getCountryNews } from "../lib/news-provider";
+
 const router: IRouter = Router();
 
 const COUNTRIES_URL =
   "https://api.first.org/data/v1/countries?limit=1000";
 
-function decodeXml(value: string): string {
-  return value
-    .replace(/<!\[CDATA\[|\]\]>/g, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#(\d+);/g, (_, code: string) =>
-      String.fromCharCode(Number(code)),
-    )
-    .trim();
-}
-
-function readXmlTag(block: string, tag: string): string {
-  const match = block.match(
-    new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "i"),
-  );
-  return match ? decodeXml(match[1]) : "";
-}
-
-function parseNewsFeed(xml: string) {
-  const blocks = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)].map(
-    (match) => match[1],
-  );
-
-  return blocks
-    .map((block, index) => {
-      const title = readXmlTag(block, "title");
-      const link = readXmlTag(block, "link");
-      return {
-        id: `${link || title}-${index}`,
-        title,
-        publisher: readXmlTag(block, "source") || "Google News",
-        link,
-        publishedAt: readXmlTag(block, "pubDate"),
-      };
-    })
-    .filter((item) => item.title && item.link)
-    .slice(0, 18);
-}
-
 router.get("/countries", async (req, res): Promise<void> => {
   try {
     const response = await fetch(COUNTRIES_URL);
+
     if (!response.ok) {
-      req.log.warn({ status: response.status }, "Country source returned an error");
-      res.status(502).json({ error: "Country directory is unavailable." });
+      req.log.warn(
+        { status: response.status },
+        "Country source returned an error",
+      );
+
+      res.status(502).json({
+        error: "Country directory is unavailable.",
+      });
       return;
     }
 
     const payload = (await response.json()) as {
-      data?: Record<string, { country?: string; region?: string }>;
+      data?: Record<
+        string,
+        {
+          country?: string;
+          region?: string;
+        }
+      >;
     };
 
     const countries = Object.entries(payload.data ?? {})
@@ -81,8 +54,14 @@ router.get("/countries", async (req, res): Promise<void> => {
 
     res.json(ListCountriesResponse.parse(countries));
   } catch (error) {
-    req.log.error({ err: error }, "Failed to load country directory");
-    res.status(502).json({ error: "Country directory is unavailable." });
+    req.log.error(
+      { err: error },
+      "Failed to load country directory",
+    );
+
+    res.status(502).json({
+      error: "Country directory is unavailable.",
+    });
   }
 });
 
@@ -92,24 +71,18 @@ router.get("/news", async (req, res): Promise<void> => {
   });
 
   if (!parsed.success) {
-    res.status(400).json({ error: "A country name is required." });
+    res.status(400).json({
+      error: "A country name is required.",
+    });
     return;
   }
 
   try {
-    const query = encodeURIComponent(`"${parsed.data.country}"`);
-    const newsUrl = `https://news.google.com/rss/search?q=${query}&hl=en-US&gl=US&ceid=US:en`;
-    const response = await fetch(newsUrl, {
-      headers: { Accept: "application/rss+xml, application/xml" },
-    });
+    // Google News and publisher RSS feeds provide the headlines.
+    // Currents is added when CURRENTS_API_KEY is configured.
+    // Results are cached for 30 minutes by getCountryNews().
+    const items = await getCountryNews(parsed.data.country);
 
-    if (!response.ok) {
-      req.log.warn({ status: response.status }, "News source returned an error");
-      res.status(502).json({ error: "Headlines are unavailable right now." });
-      return;
-    }
-
-    const items = parseNewsFeed(await response.text());
     if (!items.length) {
       res.status(502).json({
         error: `No fresh headlines found for ${parsed.data.country}.`,
@@ -117,10 +90,22 @@ router.get("/news", async (req, res): Promise<void> => {
       return;
     }
 
-    res.json(ListCountryNewsResponse.parse(items));
+    // Preserve the existing API response schema for Android.
+    const validatedItems = ListCountryNewsResponse.parse(items);
+
+    res.json(validatedItems);
   } catch (error) {
-    req.log.error({ err: error }, "Failed to load country news");
-    res.status(502).json({ error: "Headlines are unavailable right now." });
+    req.log.error(
+      {
+        err: error,
+        country: parsed.data.country,
+      },
+      "Failed to load country news",
+    );
+
+    res.status(502).json({
+      error: "Headlines are unavailable right now.",
+    });
   }
 });
 

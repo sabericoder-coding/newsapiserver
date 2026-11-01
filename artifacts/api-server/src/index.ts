@@ -1,3 +1,4 @@
+
 import app from "./app";
 import { logger } from "./lib/logger";
 
@@ -11,15 +12,20 @@ if (!rawPort) {
 
 const port = Number(rawPort);
 
-if (Number.isNaN(port) || port <= 0) {
+if (!Number.isInteger(port) || port <= 0 || port > 65535) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+const host = "0.0.0.0";
 
-  logger.info({ port }, "Server listening");
+const server = app.listen(port, host, () => {
+  logger.info(
+    { port, host },
+    "Country Pulse API server listening",
+  );
+});
+
+server.on("error", (err) => {
+  logger.error({ err }, "Error listening on port");
+  process.exit(1);
 });
