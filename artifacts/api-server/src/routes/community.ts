@@ -2,7 +2,7 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
-import { db, pool, communityReportsTable } from "@workspace/db";
+import { db, communityReportsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -257,88 +257,6 @@ router.patch(
     } catch (error) {
       req.log.error({ err: error }, "Failed to review community report");
       res.status(500).json({ error: "Could not review report." });
-    }
-  },
-);
-
-// TEMPORARY: Run the community reports database migration.
-// Remove this endpoint after the migration has succeeded.
-router.post(
-  "/admin/migrate-community-reports",
-  requireAdmin,
-  async (req, res): Promise<void> => {
-    try {
-      const client = await pool.connect();
-
-      try {
-        await client.query("BEGIN");
-
-        await client.query(`
-          DO $$
-          BEGIN
-            CREATE TYPE community_report_status
-            AS ENUM ('pending', 'approved', 'rejected');
-          EXCEPTION
-            WHEN duplicate_object THEN NULL;
-          END
-          $$;
-        `);
-
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS community_reports (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            country_code VARCHAR(2) NOT NULL,
-            country_name VARCHAR(100) NOT NULL,
-            headline VARCHAR(200) NOT NULL,
-            body TEXT NOT NULL,
-            author_name VARCHAR(80),
-            status community_report_status NOT NULL DEFAULT 'pending',
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            reviewed_at TIMESTAMPTZ,
-            reviewer_note TEXT
-          );
-        `);
-
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS community_reports_country_status_idx
-          ON community_reports (country_code, status);
-        `);
-
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS community_reports_created_at_idx
-          ON community_reports (created_at);
-        `);
-
-        await client.query("COMMIT");
-      } catch (error) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackError) {
-          req.log.error(
-            { err: rollbackError },
-            "Community reports migration rollback failed",
-          );
-        }
-
-        throw error;
-      } finally {
-        client.release();
-      }
-
-      res.json({
-        success: true,
-        message: "Community reports migration completed.",
-      });
-    } catch (error) {
-      req.log.error(
-        { err: error },
-        "Community reports migration failed",
-      );
-
-      res.status(500).json({
-        success: false,
-        error: "Community reports migration failed.",
-      });
     }
   },
 );
