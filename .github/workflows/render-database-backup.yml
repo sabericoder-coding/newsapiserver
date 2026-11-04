@@ -1,0 +1,82 @@
+
+name: Render PostgreSQL Disaster Recovery Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    container:
+      image: postgres:18
+
+    steps:
+      - name: Install encryption utility
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends gnupg
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Verify required secrets
+        env:
+          DB_URL: ${{ secrets.RENDER_DATABASE_URL }}
+          ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+        run: |
+          test -n "$DB_URL" || {
+            echo "Missing RENDER_DATABASE_URL secret"
+            exit 1
+          }
+
+          test -n "$ENCRYPTION_PASSWORD" || {
+            echo "Missing BACKUP_ENCRYPTION_PASSWORD secret"
+            exit 1
+          }
+
+      - name: Create PostgreSQL backup
+        env:
+          DB_URL: ${{ secrets.RENDER_DATABASE_URL }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+
+          mkdir -p backup
+
+          pg_dump \
+            --format=custom \
+            --no-owner \
+            --no-acl \
+            --file=backup/country-pulse.dump \
+            "$DB_URL"
+
+          pg_restore --list backup/country-pulse.dump \
+            > backup/restore-contents.txt
+
+      - name: Encrypt backup
+        env:
+          ENCRYPTION_PASSWORD: ${{ secrets.BACKUP_ENCRYPTION_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          gpg --batch --yes \
+            --pinentry-mode loopback \
+            --passphrase "$ENCRYPTION_PASSWORD" \
+            --symmetric \
+            --cipher-algo AES256 \
+            --output backup/country-pulse.dump.gpg \
+            backup/country-pulse.dump
+
+          rm backup/country-pulse.dump
+
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: country-pulse-postgres-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 30
+          if-no-files-found: error
