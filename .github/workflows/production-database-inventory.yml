@@ -1,0 +1,81 @@
+name: Production PostgreSQL Read-Only Inventory
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    container:
+      image: postgres:18
+
+    steps:
+      - name: Inspect production database catalog
+        env:
+          DB_URL: ${{ secrets.RENDER_DATABASE_URL }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+
+          if [ -z "$DB_URL" ]; then
+            echo "Missing RENDER_DATABASE_URL secret"
+            exit 1
+          fi
+
+          echo "=== Database identity ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -Atc \
+            "SELECT current_database(), current_user, version();"
+
+          echo
+          echo "=== User tables and partitioned tables ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              schemaname,
+              tablename,
+              tableowner
+            FROM pg_tables
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, tablename;
+          "
+
+          echo
+          echo "=== Views and materialized views ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              schemaname,
+              viewname,
+              viewowner
+            FROM pg_views
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, viewname;
+          "
+
+          echo
+          echo "=== User-defined sequences ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              schemaname,
+              sequencename,
+              sequenceowner
+            FROM pg_sequences
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, sequencename;
+          "
+
+          echo
+          echo "=== User-defined types ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              n.nspname AS schema_name,
+              t.typname AS type_name,
+              t.typtype AS type_kind
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+              AND t.typisdefined
+              AND t.typrelid = 0
+            ORDER BY n.nspname, t.typname;
+          "
