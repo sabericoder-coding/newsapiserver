@@ -79,3 +79,66 @@ jobs:
               AND t.typrelid = 0
             ORDER BY n.nspname, t.typname;
           "
+
+          echo
+          echo "=== Installed PostgreSQL extensions ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT extname, extversion
+            FROM pg_extension
+            ORDER BY extname;
+          "
+
+          echo
+          echo "=== User-defined functions and procedures ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              n.nspname AS schema_name,
+              p.proname AS routine_name,
+              p.prokind AS routine_kind,
+              pg_get_function_identity_arguments(p.oid) AS arguments
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY n.nspname, p.proname;
+          "
+
+          echo
+          echo "=== User-defined triggers ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              n.nspname AS schema_name,
+              c.relname AS table_name,
+              t.tgname AS trigger_name,
+              t.tgenabled AS enabled,
+              pg_get_triggerdef(t.oid) AS definition
+            FROM pg_trigger t
+            JOIN pg_class c ON c.oid = t.tgrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE NOT t.tgisinternal
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY n.nspname, c.relname, t.tgname;
+          "
+
+          echo
+          echo "=== Row-level security settings ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT
+              n.nspname AS schema_name,
+              c.relname AS table_name,
+              c.relrowsecurity AS rls_enabled,
+              c.relforcerowsecurity AS rls_forced
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind IN ('r', 'p')
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY n.nspname, c.relname;
+          "
+
+          echo
+          echo "=== Row-level security policies ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "
+            SELECT *
+            FROM pg_policies
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, tablename, policyname;
+          "
