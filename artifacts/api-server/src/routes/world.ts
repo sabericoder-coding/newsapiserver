@@ -78,9 +78,8 @@ router.get("/news", async (req, res): Promise<void> => {
   }
 
   try {
-    // Google News and publisher RSS feeds provide the headlines.
-    // Currents is added when CURRENTS_API_KEY is configured.
-    // Results are cached for 30 minutes by getCountryNews().
+    // Currents API provides the country headlines.
+    // Results are cached for 20 minutes by getCountryNews().
     const items = await getCountryNews(parsed.data.country);
 
     if (!items.length) {

@@ -1,4 +1,4 @@
-﻿
+
 import { XMLParser } from "fast-xml-parser";
 import { isIP } from "node:net";
 
@@ -881,7 +881,9 @@ async function fetchCurrents(
 ): Promise<CountryNewsItem[]> {
   const apiKey = process.env.CURRENTS_API_KEY?.trim();
 
-  if (!apiKey) return [];
+  if (!apiKey) {
+    throw new Error("CURRENTS_API_KEY is not configured.");
+  }
 
   const url = new URL(
     "https://api.currentsapi.services/v1/search",
@@ -942,9 +944,9 @@ async function fetchCurrents(
         id: article.id?.trim() || link || `currents-${index}`,
         title,
         publisher:
-          article.domain?.trim() ||
-          article.author?.trim() ||
-          publisherFromUrl(link),
+          publisherFromUrl(link) !== "Unknown source"
+            ? publisherFromUrl(link)
+            : article.author?.trim() || "Unknown source",
         link,
         publishedAt: normalizePublishedDate(
           article.published,
@@ -960,28 +962,7 @@ async function fetchCurrents(
 async function refreshNews(
   country: string,
 ): Promise<CountryNewsItem[]> {
-  const tasks: Promise<CountryNewsItem[]>[] = [
-    fetchGoogleNews(country),
-
-    ...PUBLISHER_FEEDS.map((feed) =>
-      fetchRssFeed(feed.url, feed.name, country),
-    ),
-  ];
-
-  // Currents is optional and requires an API key.
-  if (process.env.CURRENTS_API_KEY?.trim()) {
-    tasks.push(fetchCurrents(country));
-  }
-
-  const results = await Promise.allSettled(tasks);
-
-  const collected: CountryNewsItem[] = [];
-
-  for (const result of results) {
-    if (result.status === "fulfilled") {
-      collected.push(...result.value);
-    }
-  }
+  const collected = await fetchCurrents(country);
 
   // Step 1: Remove duplicate stories.
   const uniqueItems = deduplicate(collected);
@@ -996,32 +977,18 @@ async function refreshNews(
   const items = await enrichMissingImages(selectedItems);
 
   if (items.length === 0) {
-    const failures = results
-      .filter(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      )
-      .map((result) => String(result.reason));
-
-    throw new Error(
-      `No news found for "${country}". Feed failures: ${failures.join("; ")}`,
-    );
+    throw new Error(`Currents returned no news for "${country}".`);
   }
 
   return items;
 }
 
 /**
- * Retrieves country news from Google News and multiple
- * international publisher RSS feeds.
+ * Retrieves country news exclusively from the Currents API.
  *
  * Results are cached for 20 minutes by default.
  * Set NEWS_CACHE_TTL_MS to change the cache duration.
  * Set NEWS_MAX_RESULTS to change the maximum number of articles.
- *
- * A configured Currents API key adds Currents as another source.
- * Individual feed failures do not prevent successful feeds
- * from being used.
  */
 export async function getCountryNews(
   requestedCountry: string,
