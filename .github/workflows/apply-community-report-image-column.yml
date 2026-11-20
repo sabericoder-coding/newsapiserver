@@ -1,0 +1,29 @@
+﻿name: Apply Community Report Image Column
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  add-image-column:
+    runs-on: ubuntu-latest
+    container:
+      image: postgres:18
+
+    steps:
+      - name: Add and verify image_url column
+        env:
+          DB_URL: ${{ secrets.RENDER_DATABASE_URL }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          if [ -z "$DB_URL" ]; then
+            echo "Missing RENDER_DATABASE_URL secret"
+            exit 1
+          fi
+          echo "=== Adding image_url column if missing ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "ALTER TABLE public.community_reports ADD COLUMN IF NOT EXISTS image_url TEXT;"
+          echo "=== Verifying image_url column ==="
+          psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'community_reports' AND column_name = 'image_url';"
