@@ -142,3 +142,4 @@ jobs:
             WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
             ORDER BY schemaname, tablename, policyname;
           "
+          echo; echo "=== Community reports image_url column ==="; psql "$DB_URL" -X -v ON_ERROR_STOP=1 -P pager=off -c "SELECT table_schema, table_name, column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'community_reports' AND column_name = 'image_url';"
