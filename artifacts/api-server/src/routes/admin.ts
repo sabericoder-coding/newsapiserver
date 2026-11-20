@@ -8,6 +8,12 @@ import {
   loginRateLimit,
 } from "../lib/admin-auth";
 
+
+import {
+  deleteCommunityReportImage,
+  getCommunityReportImageFileId,
+} from "../lib/appwrite-storage";
+
 const router: IRouter = Router();
 
 const requireSameOrigin: RequestHandler = (req, res, next) => {
@@ -101,6 +107,74 @@ router.get("/admin/reports", requireAdminSession, async (req, res): Promise<void
     res.status(500).json({ error: "Could not load reports." });
   }
 });
+
+
+router.delete(
+  "/admin/reports/:id/image",
+  requireSameOrigin,
+  requireAdminSession,
+  async (req, res): Promise<void> => {
+    const id = req.params.id;
+
+    if (
+      typeof id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ) {
+      res.status(400).json({ error: "Invalid report ID." });
+      return;
+    }
+
+    try {
+      const [report] = await db
+        .select({
+          id: communityReportsTable.id,
+          imageUrl: communityReportsTable.imageUrl,
+        })
+        .from(communityReportsTable)
+        .where(eq(communityReportsTable.id, id))
+        .limit(1);
+
+      if (!report) {
+        res.status(404).json({ error: "Report not found." });
+        return;
+      }
+
+      if (!report.imageUrl) {
+        res.json({ message: "This report has no image." });
+        return;
+      }
+
+      const fileId = getCommunityReportImageFileId(report.imageUrl);
+
+      if (!fileId) {
+        res.status(409).json({
+          error: "The report image URL is not a recognized Appwrite file.",
+        });
+        return;
+      }
+
+      await deleteCommunityReportImage(fileId);
+
+      await db
+        .update(communityReportsTable)
+        .set({ imageUrl: null })
+        .where(
+          and(
+            eq(communityReportsTable.id, id),
+            eq(communityReportsTable.imageUrl, report.imageUrl),
+          ),
+        );
+
+      res.json({ message: "Report image deleted." });
+    } catch (error) {
+      req.log.error({ err: error }, "Failed to delete community report image");
+      res.status(500).json({ error: "Could not delete the report image." });
+    }
+  },
+);
+
+
+
 
 router.patch(
   "/admin/reports/:id",

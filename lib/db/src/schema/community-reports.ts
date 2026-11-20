@@ -1,4 +1,4 @@
-﻿import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema } from "drizzle-zod";
 import {
   index,
   pgEnum,
@@ -24,6 +24,7 @@ export const communityReportsTable = pgTable(
     headline: varchar("headline", { length: 200 }).notNull(),
     body: text("body").notNull(),
     authorName: varchar("author_name", { length: 80 }),
+    imageUrl: text("image_url"),
     status: communityReportStatus("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

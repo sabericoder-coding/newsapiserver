@@ -1,10 +1,11 @@
+
 export const adminDashboardHtml = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Country Pulse  Admin</title>
+<title>Country Pulse Admin</title>
 <style>
 :root{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#172521;background:#f3f6f3;font-synthesis:none}
 *{box-sizing:border-box}
@@ -115,6 +116,8 @@ label{display:block;font-size:12px;font-weight:700;margin:15px 0 6px}
     <h2 id="detailTitle"></h2>
     <p class="muted" id="detailMeta"></p>
     <div class="body" id="detailBody"></div>
+    <img id="detailImage" alt="Community report attachment" hidden style="display:none; max-width:100%; max-height:360px; object-fit:contain; border-radius:10px; margin:16px 0;">
+    <button class="btn bad" id="deleteImageButton" type="button" hidden style="display:none;">Delete image</button>
     <div id="existingNote" class="notice"></div>
     <label for="reviewerNote">Reviewer note (optional)</label>
     <textarea class="field" id="reviewerNote" maxlength="2000" placeholder="Add a moderation note"></textarea>
@@ -222,7 +225,7 @@ function renderReports(){
   var actions=r.status==="pending"
    ?'<button class="btn good" data-action="approved" data-id="'+id+'">Approve</button><button class="btn bad" data-action="rejected" data-id="'+id+'">Reject</button>'
    :'';
-  return '<article class="report"><div><div class="meta"><span class="status '+status+'">'+status+'</span><span>'+escapeHtml(r.countryName)+' ('+escapeHtml(r.countryCode)+')</span><span>'+escapeHtml(r.authorName||"Anonymous")+'</span><span>'+escapeHtml(dateText(r.createdAt))+'</span></div><h3>'+escapeHtml(r.headline)+'</h3><div class="body">'+escapeHtml((r.body||"").length>260?r.body.slice(0,260)+"":r.body)+'</div><button class="btn" style="margin-top:12px" data-view="'+id+'">View details</button></div><div class="actions">'+actions+'</div></article>';
+  return '<article class="report"><div><div class="meta"><span class="status '+status+'">'+status+'</span><span>'+escapeHtml(r.countryName)+' ('+escapeHtml(r.countryCode)+')</span><span>'+escapeHtml(r.authorName||"Anonymous")+'</span><span>'+escapeHtml(dateText(r.createdAt))+'</span></div><h3>'+escapeHtml(r.headline)+'</h3><div class="body">'+escapeHtml((r.body||"").length>260?r.body.slice(0,260):r.body)+'</div><button class="btn" style="margin-top:12px" data-view="'+id+'">View details</button></div><div class="actions">'+actions+'</div></article>';
  }).join("");
 }
 async function loadReports(){
@@ -249,6 +252,27 @@ function openDetails(id){
   " ("+(selectedReport.countryCode||"")+")  "+
   (selectedReport.authorName||"Anonymous")+"  "+dateText(selectedReport.createdAt);
  el("detailBody").textContent=selectedReport.body||"";
+
+ var detailImage=el("detailImage");
+ detailImage.removeAttribute("src");
+ detailImage.hidden=true;
+ detailImage.style.display="none";
+
+ var hasImage=false;
+ if(typeof selectedReport.imageUrl==="string"&&selectedReport.imageUrl){
+  try{
+   var imageUrl=new URL(selectedReport.imageUrl);
+   if(imageUrl.protocol==="https:"){
+    detailImage.src=imageUrl.href;
+    detailImage.hidden=false;
+    detailImage.style.display="block";
+    hasImage=true;
+   }
+  }catch(e){}
+ }
+ el("deleteImageButton").hidden=!hasImage;
+ el("deleteImageButton").style.display=hasImage?"inline-block":"none";
+
  el("existingNote").textContent=selectedReport.reviewerNote?"Previous reviewer note: "+selectedReport.reviewerNote:"";
  el("reviewerNote").value=selectedReport.reviewerNote||"";
  el("actionError").textContent="";
@@ -256,6 +280,36 @@ function openDetails(id){
  el("approveButton").classList.toggle("hidden",!pending);
  el("rejectButton").classList.toggle("hidden",!pending);
  el("modal").classList.add("open");
+}
+async function deleteImage(){
+ if(!selectedReport||!selectedReport.imageUrl||busy)return;
+ if(!window.confirm("Delete the image attached to this report? The report itself will remain."))return;
+
+ busy=true;
+ el("deleteImageButton").disabled=true;
+ el("actionError").textContent="Deleting image...";
+
+ try{
+  await api("/api/admin/reports/"+encodeURIComponent(selectedReport.id)+"/image",{
+   method:"DELETE"
+  });
+
+  selectedReport.imageUrl=null;
+  var reportInList=currentReports.find(function(r){return String(r.id)===String(selectedReport.id)});
+  if(reportInList)reportInList.imageUrl=null;
+
+  el("detailImage").removeAttribute("src");
+  el("detailImage").hidden=true;
+  el("detailImage").style.display="none";
+  el("deleteImageButton").hidden=true;
+  el("deleteImageButton").style.display="none";
+  el("actionError").textContent="Image deleted. The report has been kept.";
+ }catch(e){
+  el("actionError").textContent=e.message;
+ }finally{
+  busy=false;
+  el("deleteImageButton").disabled=false;
+ }
 }
 async function moderate(status){
  if(!selectedReport||busy)return;
@@ -299,6 +353,7 @@ el("reports").addEventListener("click",function(e){
   if(selectedReport)moderate(action.getAttribute("data-action"));
  }
 });
+el("deleteImageButton").addEventListener("click",deleteImage);
 el("closeModal").addEventListener("click",function(){el("modal").classList.remove("open");});
 el("approveButton").addEventListener("click",function(){moderate("approved");});
 el("rejectButton").addEventListener("click",function(){moderate("rejected");});
