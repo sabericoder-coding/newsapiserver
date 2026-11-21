@@ -562,9 +562,9 @@ function countryMatches(
   text: string,
   country: string,
 ): boolean {
-  return text
-    .toLocaleLowerCase()
-    .includes(country.toLocaleLowerCase());
+  return text.toLocaleLowerCase().includes(
+    country.toLocaleLowerCase(),
+  );
 }
 
 function toNewsItem(
@@ -861,19 +861,22 @@ async function fetchRssFeed(
     });
 }
 
+
 async function fetchGoogleNews(
   country: string,
 ): Promise<CountryNewsItem[]> {
-  const url = new URL(
-    "https://news.google.com/rss/search",
-  );
+  const url = new URL("https://news.google.com/rss/search");
 
   url.searchParams.set("q", country);
   url.searchParams.set("hl", "en-US");
   url.searchParams.set("gl", "US");
   url.searchParams.set("ceid", "US:en");
 
-  return fetchRssFeed(url.toString(), "Google News");
+  return fetchRssFeed(
+    url.toString(),
+    "Google News",
+    country,
+  );
 }
 
 async function fetchCurrents(
@@ -962,33 +965,74 @@ async function fetchCurrents(
 async function refreshNews(
   country: string,
 ): Promise<CountryNewsItem[]> {
-  const collected = await fetchCurrents(country);
+  let collected: CountryNewsItem[] = [];
 
-  // Step 1: Remove duplicate stories.
+  // 1. Try Currents first.
+  try {
+    collected = await fetchCurrents(country);
+  } catch (error) {
+    console.warn(
+      `[news] Currents failed for "${country}":`,
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  // 2. Use RSS sources only if Currents fails or returns no articles.
+  if (collected.length === 0) {
+    console.log(
+      `[news] Currents returned no articles for "${country}". Trying RSS sources.`,
+    );
+
+    const rssResults = await Promise.allSettled([
+      ...PUBLISHER_FEEDS.map((feed) =>
+        fetchRssFeed(feed.url, feed.name, country),
+      ),
+      fetchGoogleNews(country),
+    ]);
+
+    collected = rssResults.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    );
+
+    const failedFeeds = rssResults.filter(
+      (result) => result.status === "rejected",
+    ).length;
+
+    if (failedFeeds > 0) {
+      console.warn(
+        `[news] ${failedFeeds} RSS source(s) failed for "${country}".`,
+      );
+    }
+  }
+
+  // 3. Deduplicate articles.
   const uniqueItems = deduplicate(collected);
 
-  // Step 2: Prioritize country relevance and recency.
+  // 4. Rank by country relevance and recency.
   const rankedItems = rankNewsItems(uniqueItems, country);
 
-  // Step 3: Enforce the configured maximum.
+  // 5. Enforce the configured maximum.
   const selectedItems = rankedItems.slice(0, getMaxResults());
 
-  // Step 4: Retrieve missing article images.
+  // 6. Retrieve missing article images.
   const items = await enrichMissingImages(selectedItems);
 
   if (items.length === 0) {
-    throw new Error(`Currents returned no news for "${country}".`);
+    throw new Error(
+      `No news sources returned articles for "${country}".`,
+    );
   }
 
   return items;
 }
 
 /**
- * Retrieves country news exclusively from the Currents API.
+ 
+ * Retrieves country news from Currents, with publisher RSS
+ * and Google News RSS as fallbacks.
  *
  * Results are cached for 20 minutes by default.
- * Set NEWS_CACHE_TTL_MS to change the cache duration.
- * Set NEWS_MAX_RESULTS to change the maximum number of articles.
+ *
  */
 export async function getCountryNews(
   requestedCountry: string,
