@@ -1,4 +1,4 @@
-﻿
+
 import { Router, type IRouter, type RequestHandler } from "express";
 import { timingSafeEqual } from "node:crypto";
 import multer from "multer";
@@ -272,6 +272,7 @@ router.get("/community-reports", async (req, res): Promise<void> => {
 
     res.json(reports);
   } catch (error) {
+    console.error("[Country Pulse] Failed to load approved community reports:", error);
     req.log.error({ err: error }, "Failed to load approved community reports");
     res.status(500).json({ error: "Could not load community reports." });
   }
