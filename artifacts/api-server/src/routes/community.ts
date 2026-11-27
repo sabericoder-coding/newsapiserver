@@ -272,7 +272,13 @@ router.get("/community-reports", async (req, res): Promise<void> => {
 
     res.json(reports);
   } catch (error) {
-    console.error("[Country Pulse] Failed to load approved community reports:", error);
+
+
+console.error("[Country Pulse] Failed to load approved community reports:", error);
+if (error instanceof Error && error.cause) {
+  console.error("[Country Pulse] PostgreSQL underlying error:", error.cause);
+}
+
     req.log.error({ err: error }, "Failed to load approved community reports");
     res.status(500).json({ error: "Could not load community reports." });
   }
